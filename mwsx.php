@@ -171,7 +171,7 @@ function ws($url)
 	return	$obj;
 }
 
-function http_read( $URL, $RAW_POST_DATA )
+function http_read($url, $raw_post_data)
 {
 	$headers = array("Content-Type: text/xml; charset=utf-8", "Expect: ");
 
@@ -181,7 +181,7 @@ function http_read( $URL, $RAW_POST_DATA )
 	}
 	$ws_cookie = (array_key_exists('ws_cookie', $_SESSION)) ? $_SESSION['ws_cookie'] : null;
 	if ($ws_cookie != null) {
-		$headers[] = 'Cookie: '. $ws_cookie;
+		$headers[] = 'Cookie: '.$ws_cookie;
 	}
 	
 	// server comunication
@@ -190,7 +190,7 @@ function http_read( $URL, $RAW_POST_DATA )
 	curl_setopt($curl, CURLOPT_HTTPHEADER, $headers);
 	curl_setopt($curl, CURLOPT_HEADER, true); 
 	curl_setopt($curl, CURLOPT_POST, true);
-	curl_setopt($curl, CURLOPT_POSTFIELDS, $RAW_POST_DATA);
+	curl_setopt($curl, CURLOPT_POSTFIELDS, $raw_post_data);
 	curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
 	curl_setopt($curl, CURLOPT_TIMEOUT, 15);
 	curl_setopt($curl, CURLOPT_SSL_VERIFYPEER, false);

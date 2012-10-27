@@ -173,7 +173,7 @@ function ws($url)
 
 function http_read($url, $raw_post_data)
 {
-	$headers = array("Content-Type: text/xml; charset=utf-8", "Expect: ");
+	$headers = array();
 
 	// cookie
 	if (session_id() == "") {
@@ -183,6 +183,10 @@ function http_read($url, $raw_post_data)
 	if ($ws_cookie != null) {
 		$headers[] = 'Cookie: '.$ws_cookie;
 	}
+	
+	// headers
+	$headers[] = "Content-Type: text/xml; charset=utf-8";
+	$headers[] = "Expect: ";
 	
 	// server comunication
 	$curl = curl_init();
@@ -202,8 +206,10 @@ function http_read($url, $raw_post_data)
 
 	// cookies
 	$cookie_pos = strpos($buffer[0], 'Set-Cookie');
-	if ($cookie_pos !== false) {
-		$_SESSION['ws_cookie'] = substr($buffer[0], $cookie_pos+strlen('Set-Cookie: '), strpos($buffer[0], ';'));
+	if ($cookie_pos !== false) 
+	{
+		$value_pos_start = $cookie_pos+strlen('Set-Cookie: ');
+		$_SESSION['ws_cookie'] = substr($buffer[0], $value_pos_start, strpos($buffer[0], ';', $cookie_pos)-$value_pos_start);
 	}
 	
 	// only returns the body

@@ -202,7 +202,7 @@ function http_read($url, $raw_post_data)
 	curl_close($curl);
 	
 	// head + body split
-	$buffer = explode("\r\n\r\n", $result, 1);
+	$buffer = explode("\r\n\r\n", $result, 2);
 
 	// cookies
 	$cookie_pos = strpos($buffer[0], 'Set-Cookie');

@@ -139,7 +139,7 @@ elseif (isset($_REQUEST['mws']))
  */
 function parse_result($result)
 {
-	$content = (array)json_decode($result);
+	$content = (array)json_decode($result, true);
 	global $ws_result;
 	$ws_result = array("result" => $content['result'], "error" => $content['error'], "warns" => $content['warns'], "signals" => $content['signals']);
 	return	$content['result'];
@@ -158,7 +158,7 @@ function ws_call($url, $key_args, $value_args)
  
 function ws($url) 
 {	
-	$mwsd = json_decode(http_read($url, ""), TRUE);
+	$mwsd = (array)json_decode(http_read($url, ""), true);
 	
 	$sources = array();
 	foreach ($mwsd as $fnc) {

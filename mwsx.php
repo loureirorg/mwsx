@@ -13,6 +13,10 @@
  *-------------------------------------------------------------------------
  */
 
+// configuration
+$mwsx_memcache_host = "ec2-54-232-13-113.sa-east-1.compute.amazonaws.com:11211"; //"myhost.com:port"
+$mwsx_memcache_timeout = 60;
+ 
 // error/warning control
 global $ws_result;
 $ws_result = array("result" => null, "error" => null, "warns" => array(), "signals" => array());
@@ -26,11 +30,29 @@ $ws_result = array("result" => null, "error" => null, "warns" => array(), "signa
  * 		search for "_EXPORT_" in source-code
  */
 function published_functions() 
-{
+{	
+    $path = pathinfo($_SERVER['PHP_SELF']);
+
+	/* 
+	 * try cache
+	 */
+	global $mwsx_memcache_host;
+	global $mwsx_memcache_timeout;
+	if (!empty($mwsx_memcache_host)) 
+	{
+		// try cache
+        $key = md5($path['basename']."/published");
+        $mem = new Memcache;
+		$mem->addServer($mwsx_memcache_host);
+        $result = $mem->get($key);
+		if ($result !== false) { 
+			return unserialize($result);
+		}
+	}
+	
     /* 
 	 * descobre nome do próprio script e pega seu conteúdo 
 	 */
-    $path = pathinfo($_SERVER['PHP_SELF']);
     $source = file_get_contents($path['basename']);
     
     /*
@@ -46,6 +68,11 @@ function published_functions()
     $args = array_map(create_function('$str_args', 'return	$str_args == "" ? array() : explode(",", preg_replace(\'/[\$ \n]/\', \'\', $str_args));' ), $str_args);
     $fncs = array_map(create_function('$a, $b', "return	array('name' => \$a, 'args' => \$b);"), $str_fncs, $args);
 
+	// save cache
+	if (!empty($mwsx_memcache_host)) {
+		$mem->set($key, serialize($fncs), 0, $mwsx_memcache_timeout); 
+	}
+	
     return $fncs;
 }
 
@@ -95,11 +122,28 @@ if ($_SERVER['QUERY_STRING'] == "mwsd")
  	/* 
  	 * mostra listagem de funções
  	 */
-	$fncs = published_functions();
 	$server_port = ($_SERVER['SERVER_PORT'] == 80) ? "" : $_SERVER['SERVER_PORT'];
 	$default_url = "http://".$_SERVER['HTTP_HOST'].$server_port.$_SERVER['PHP_SELF'];
+
+	if (!empty($mwsx_memcache_host)) 
+	{
+		// try cache
+        $key = md5($default_url."/mwsd");
+        $mem = new Memcache;
+		$mem->addServer($mwsx_memcache_host);
+        $result = $mem->get($key);
+		if ($result !== false) {
+			die($result);
+		}
+	}
+	
+	$fncs = published_functions();
 	$fncs_with_url = array_map(create_function('$item', '$item["url"] = "'.$default_url.'?mws=".$item["name"]; return	$item;'), $fncs);
-    die(json_encode($fncs_with_url));
+	$mwsd = json_encode($fncs_with_url);
+	if (!empty($mwsx_memcache_host)) { 
+		$mem->set($key, $mwsd, 0, $mwsx_memcache_timeout); 
+	}
+    die($mwsd);
 }
 
 elseif (isset($_REQUEST['mws']))

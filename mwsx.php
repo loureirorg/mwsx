@@ -14,7 +14,7 @@
  */
 
 // configuration
-$mwsx_memcache_host = "ec2-54-232-13-113.sa-east-1.compute.amazonaws.com:11211"; //"myhost.com:port"
+$mwsx_memcache_host = ""; //"myhost.com:port";
 $mwsx_memcache_timeout = 60;
  
 // error/warning control
@@ -33,14 +33,11 @@ function published_functions()
 {	
     $path = pathinfo($_SERVER['PHP_SELF']);
 
-	/* 
-	 * try cache
-	 */
+	// try cache first
 	global $mwsx_memcache_host;
 	global $mwsx_memcache_timeout;
 	if (!empty($mwsx_memcache_host)) 
 	{
-		// try cache
         $key = md5($path['basename']."/published");
         $mem = new Memcache;
 		$mem->addServer($mwsx_memcache_host);
@@ -50,21 +47,15 @@ function published_functions()
 		}
 	}
 	
-    /* 
-	 * descobre nome do próprio script e pega seu conteúdo 
-	 */
+    // cache not found, we'll produce new list based on source
     $source = file_get_contents($path['basename']);
     
-    /*
-     * desmembra fonte pegando funções exportadas
-     */
+    // list of published functions
     preg_match_all('/\/\* _EXPORT_ \*\/[ \t\r\n]*function[ \t\r\n]?(.+)[ \t\r\n]*\((.*)\)/', $source, $matches);
 	$str_args = $matches[2];
 	$str_fncs = $matches[1];
     
-    /*
-     * consome literais
-     */
+    // split arguments and format in mwsd
     $args = array_map(create_function('$str_args', 'return	$str_args == "" ? array() : explode(",", preg_replace(\'/[\$ \n]/\', \'\', $str_args));' ), $str_args);
     $fncs = array_map(create_function('$a, $b', "return	array('name' => \$a, 'args' => \$b);"), $str_fncs, $args);
 
@@ -73,13 +64,13 @@ function published_functions()
 		$mem->set($key, serialize($fncs), 0, $mwsx_memcache_timeout); 
 	}
 	
+	// return list of functions (actually mwsd, but not in json form)
     return $fncs;
 }
 
 
 /*
- * get_data
- * 
+ * accept data in json or php ("domain.com/?arg_1=xxx&arg_2=yyy")
  */
 function get_data()
 {
@@ -89,14 +80,14 @@ function get_data()
 }
 
 /*
- * stop script and reports error
+ * stop script and report error
  */
 function error($msg)
 {
 	// system log
 	error_log(date("Y-m-d H:i:s")."; ".$_SERVER['REMOTE_ADDR']."; ".$msg.";");
 	
-	// stop script and reports error
+	// stop script and report error
 	global $ws_result;
 	$ws_result = array("result" => null, "error" => $msg, "warns" => array(), "signals" => $ws_result['signals']);
 	die(json_encode($ws_result));
@@ -119,15 +110,13 @@ function signal($signal)
 
 if ($_SERVER['QUERY_STRING'] == "mwsd") 
 {
- 	/* 
- 	 * mostra listagem de funções
- 	 */
+ 	// mwsd request (list of funtions)
 	$server_port = ($_SERVER['SERVER_PORT'] == 80) ? "" : $_SERVER['SERVER_PORT'];
 	$default_url = "http://".$_SERVER['HTTP_HOST'].$server_port.$_SERVER['PHP_SELF'];
 
+	// try cache
 	if (!empty($mwsx_memcache_host)) 
 	{
-		// try cache
         $key = md5($default_url."/mwsd");
         $mem = new Memcache;
 		$mem->addServer($mwsx_memcache_host);
@@ -137,6 +126,7 @@ if ($_SERVER['QUERY_STRING'] == "mwsd")
 		}
 	}
 	
+	// not in cache, we'll generate
 	$fncs = published_functions();
 	$fncs_with_url = array_map(create_function('$item', '$item["url"] = "'.$default_url.'?mws=".$item["name"]; return	$item;'), $fncs);
 	$mwsd = json_encode($fncs_with_url);
@@ -148,9 +138,7 @@ if ($_SERVER['QUERY_STRING'] == "mwsd")
 
 elseif (isset($_REQUEST['mws']))
 {
- 	/* 
- 	 * chama método
- 	 */
+ 	// calling a method
     $fncs = published_functions();
 	$fnc = array_filter($fncs, create_function('$item', 'return	$item["name"] == "'.$_REQUEST['mws'].'";'));
 	if ($fnc == array()) {
@@ -158,9 +146,7 @@ elseif (isset($_REQUEST['mws']))
 	}
 	$fnc = array_pop($fnc);
 	
-	/*
-	 * ordenamos os parâmetros na ordem em que aparecem no fonte
-	 */
+	// order arguments in the same order of source
    	$ordered_args = array();
 	if ($fnc['args'] != array())
 	{
@@ -170,9 +156,7 @@ elseif (isset($_REQUEST['mws']))
 		}
 	}
 	
-	/* 
-	 * chama a função, mostra resultados no padrão MWS
-	 */
+	// calling function, show results in mwsx style
 	$ws_result['result'] = call_user_func_array($_REQUEST['mws'], $ordered_args);
  	die(json_encode($ws_result));
 }

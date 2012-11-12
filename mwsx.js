@@ -7,7 +7,7 @@ function parse_result(result)
 	return	content.result;
 }
 
-function http_read(url, post_data, callback)
+function http_read(url, post_data, callback, callback_progress)
 {
 	if (!window.FormData) {
 		var data_send = JSON.stringify(post_data);
@@ -15,47 +15,75 @@ function http_read(url, post_data, callback)
 	else
 	{
 		var data_send = new FormData();
-		for (var i in post_data) {
-			data_send.append(i, post_data[i]);
+		for (var i in post_data) 
+		{
+			if ((post_data[i] instanceof HTMLInputElement) && (post_data[i].type == "file"))
+			{
+				for (var j = 0; j < post_data[i].files.length; j++) {
+					data_send.append(i, post_data[i].files[j]);
+				}
+			}
+			else {
+				data_send.append(i, post_data[i]);
+			}
 		}
 	}
 
 	var xhr = window.XMLHttpRequest ? new XMLHttpRequest() : new ActiveXObject("MSXML2.XMLHTTP.3.0");
 	if (callback != null) 
 	{
-		xhr.onload = function (response) { 
+		xhr.onload = function (e) { 
 			if (this.status == 200) {
-				callback(parse_result(response));
+				callback(parse_result(this.response));
 			}
 		}
 	}
 	
 	var async = (callback != null);
 	xhr.open("POST", url, async);
-	xhr.send(data_send);	
+	if (callback_progress != null)
+	{
+		xhr.upload.onprogress = function(e) {
+			if (e.lengthComputable) {
+				callback_progress(e.loaded, e.total);
+			}
+		};
+	}
+	xhr.send(data_send);
 	return	async ? xhr : xhr.responseText;
 } 
 
 function ws_call(url, key_args, value_args)
 {
-	var callback = null;
+	var callback = new Array(null, null);
 	var data = new Object();
 	key_args = key_args.split(",");
-	for (var i = 0, j = 0, len = key_args.length; i < len; i++)
+	for (var i = 0, j = 0, icb = 0, len = value_args.length; j < len; i++)
 	{
-		if (typeof(value_args[j]) == "function") { 
-			callback = value_args[j++];
+		while (typeof(value_args[j]) == "function") { 
+			callback[icb++] = value_args[j++];
 		}
-		data[key_args[i]] = value_args[j++];
+		if (j < len) {
+			data[key_args[i]] = value_args[j++];
+		}
 	}
-	return	parse_result(http_read(url, data, callback));
+	var response = http_read(url, data, callback[0], callback[1]);
+	return	callback[0] != null ? response : parse_result(response);
 }		
 
 function ws(url)
 {	
-	var mwsd = JSON.parse(http_read(url, null));
+	var mwsd = JSON.parse(http_read(url, null, null));
 	for (var i in mwsd) {
 		eval("this."+mwsd[i].name+"=function(){return	ws_call('"+mwsd[i].url+"', '"+mwsd[i].args.join(",")+"', arguments);}");
+	}
+}
+
+function ws_include(url)
+{	
+	var mwsd = JSON.parse(http_read(url, null, null));
+	for (var i in mwsd) {
+		eval(mwsd[i].name+"=function(){return	ws_call('"+mwsd[i].url+"', '"+mwsd[i].args.join(",")+"', arguments);}");
 	}
 }
 

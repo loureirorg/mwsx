@@ -7,7 +7,7 @@
  * Copyleft 2012 - Public Domain
  * Original Author: Daniel Loureiro
  *
- * version 2.0a
+ * version 2.0a @ 2012-11-11
  *
  * https://github.com/loureirorg/mwsx
  *-------------------------------------------------------------------------
@@ -76,7 +76,7 @@ function get_data()
 {
 	$post	= @json_decode(file_get_contents('php://input'), TRUE);
 	$get	= @json_decode(urldecode($_SERVER['QUERY_STRING']), TRUE);
-    return	array_merge(is_array($post)?$post:array(), is_array($get)?$get:array(), $_REQUEST);
+    return	array_merge(is_array($post)?$post:array(), is_array($get)?$get:array(), $_REQUEST, $_FILES);
 }
 
 /*

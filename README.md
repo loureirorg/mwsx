@@ -5,24 +5,14 @@
 mwsX its a library to remotelly call a function, independent of which language it was written. You can include your PHP file in Javascript and access the PHP functions, or call Ruby methods in PHP, even in different server.
 
 ## How?
-```ruby
-# this file: my_ruby.rb
-require "mwsx"
-
-# _EXPORT_
-def my_ruby_function(a)
-	return "Hello #{a}!"
-end
-```
 ```php
 <?php
 // this file: my_php.php
 require("mwsx.php");
-require_ws("my_ruby/mwsd");
 
 /* _EXPORT_ */
-function my_php_function($a) {
-	return "PHP say: ".my_ruby_function($a);
+function my_function($a) {
+	return my_function($a);
 }
 ```
 ```html
@@ -30,13 +20,11 @@ function my_php_function($a) {
 <script type="text/javascript" src="mwsx.js"></script>
 <script type="text/javascript">
 	require_ws("my_php.php?mwsd");
-	require_ws("my_ruby/mwsd");
 	
-	alert(my_php_function("World"));
-	alert(my_ruby_function("World"));
+	alert(my_function("World"));
 </script>
 ```
-Calling "my_html.html" will popup an alert with "PHP say: Hello World!" and "Hello World!"
+Calling "my_html.html" an alert will popup with "Hello World" message
 
 ## Features
 * http/json based communication

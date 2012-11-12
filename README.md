@@ -17,25 +17,23 @@ end
 ```php
 <?php
 // this file: my_php.php
-include_once("mwsx.php");
-include_ws("my_ruby.rb");
+require("mwsx.php");
+require_ws("my_ruby/mwsd");
 
 /* _EXPORT_ */
-function my_php_function($a)
-{
+function my_php_function($a) {
 	return "PHP say: ".my_ruby_function(a);
 }
-
 ```
 ```html
+<!-- this file: my_html.html -->
 <script type="text/javascript" src="mwsx.js"></script>
 <script type="text/javascript">
 	ws_include("my_php.php?mwsd");
 	alert(my_php_function("World"));
 </script>
-
 ```
-
+Calling "my_html.html" will popup an alert with "PHP say: Hello World!".
 
 ## Features
 * http/json based communication

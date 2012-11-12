@@ -7,7 +7,7 @@
  * Copyleft 2012 - Public Domain
  * Original Author: Daniel Loureiro
  *
- * version 2.0a @ 2012-11-11
+ * version 2.0a @ 2012-11-12
  *
  * https://github.com/loureirorg/mwsx
  *-------------------------------------------------------------------------
@@ -25,47 +25,63 @@ $ws_result = array("result" => null, "error" => null, "warns" => array(), "signa
  * SERVER
  */
 
+function cache_load($key)
+{
+	global $mwsx_memcache_host;
+	
+	if (!empty($mwsx_memcache_host)) 
+	{
+		$mem = new Memcache;
+		$mem->addServer($mwsx_memcache_host);
+		$result = $mem->get($key);
+		if ($result !== false) { 
+			return	unserialize($result);
+		}
+	}
+	return false;
+}
+
+function cache_save($key, $value)
+{
+	global $mwsx_memcache_timeout;
+	
+	if (!empty($mwsx_memcache_host)) {
+		$mem->set($key, serialize($value), 0, $mwsx_memcache_timeout); 
+	}
+}
+ 
 /*
  * published_functions
  * 		search for "_EXPORT_" in source-code
  */
 function published_functions() 
 {	
-    $path = pathinfo($_SERVER['PHP_SELF']);
+	$path = pathinfo($_SERVER['PHP_SELF']);
 
 	// try cache first
-	global $mwsx_memcache_host;
-	global $mwsx_memcache_timeout;
-	if (!empty($mwsx_memcache_host)) 
-	{
-        $key = md5($path['basename']."/published");
-        $mem = new Memcache;
-		$mem->addServer($mwsx_memcache_host);
-        $result = $mem->get($key);
-		if ($result !== false) { 
-			return unserialize($result);
-		}
+	$cache_key = md5($path['basename']."/published");
+	$result = cache_load($cache_key);
+	if ($result !== false) {
+		return	$result;
 	}
-	
-    // cache not found, we'll produce new list based on source
-    $source = file_get_contents($path['basename']);
-    
-    // list of published functions
-    preg_match_all('/\/\* _EXPORT_ \*\/[ \t\r\n]*function[ \t\r\n]?(.+)[ \t\r\n]*\((.*)\)/', $source, $matches);
+
+	// cache not found, we'll produce new list based on source
+	$source = file_get_contents($path['basename']);
+
+	// list of published functions
+	preg_match_all('/\/\* _EXPORT_ \*\/[ \t\r\n]*function[ \t\r\n]?(.+)[ \t\r\n]*\((.*)\)/', $source, $matches);
 	$str_args = $matches[2];
 	$str_fncs = $matches[1];
-    
-    // split arguments and format in mwsd
-    $args = array_map(create_function('$str_args', 'return	$str_args == "" ? array() : explode(",", preg_replace(\'/[\$ \n]/\', \'\', $str_args));' ), $str_args);
-    $fncs = array_map(create_function('$a, $b', "return	array('name' => \$a, 'args' => \$b);"), $str_fncs, $args);
+
+	// split arguments and format in mwsd
+	$args = array_map(create_function('$str_args', 'return	$str_args == "" ? array() : explode(",", preg_replace(\'/[\$ \n]/\', \'\', $str_args));' ), $str_args);
+	$fncs = array_map(create_function('$a, $b', "return	array('name' => \$a, 'args' => \$b);"), $str_fncs, $args);
 
 	// save cache
-	if (!empty($mwsx_memcache_host)) {
-		$mem->set($key, serialize($fncs), 0, $mwsx_memcache_timeout); 
-	}
-	
+	cache_save($cache_key, $fncs);
+
 	// return list of functions (actually mwsd, but not in json form)
-    return $fncs;
+	return $fncs;
 }
 
 
@@ -76,7 +92,7 @@ function get_data()
 {
 	$post	= @json_decode(file_get_contents('php://input'), TRUE);
 	$get	= @json_decode(urldecode($_SERVER['QUERY_STRING']), TRUE);
-    return	array_merge(is_array($post)?$post:array(), is_array($get)?$get:array(), $_REQUEST, $_FILES);
+	return	array_merge(is_array($post)?$post:array(), is_array($get)?$get:array(), $_REQUEST, $_FILES);
 }
 
 /*
@@ -86,7 +102,7 @@ function error($msg)
 {
 	// system log
 	error_log(date("Y-m-d H:i:s")."; ".$_SERVER['REMOTE_ADDR']."; ".$msg.";");
-	
+
 	// stop script and report error
 	global $ws_result;
 	$ws_result = array("result" => null, "error" => $msg, "warns" => array(), "signals" => $ws_result['signals']);
@@ -115,24 +131,17 @@ if ($_SERVER['QUERY_STRING'] == "mwsd")
 	$default_url = "http://".$_SERVER['HTTP_HOST'].$server_port.$_SERVER['PHP_SELF'];
 
 	// try cache
-	if (!empty($mwsx_memcache_host)) 
-	{
-        $key = md5($default_url."/mwsd");
-        $mem = new Memcache;
-		$mem->addServer($mwsx_memcache_host);
-        $result = $mem->get($key);
-		if ($result !== false) {
-			die($result);
-		}
+	$cache_key = md5($default_url."/mwsd");
+	$result = cache_load($cache_key);
+	if ($result !== false) {
+		die($result);
 	}
 	
 	// not in cache, we'll generate
 	$fncs = published_functions();
 	$fncs_with_url = array_map(create_function('$item', '$item["url"] = "'.$default_url.'?mws=".$item["name"]; return	$item;'), $fncs);
 	$mwsd = json_encode($fncs_with_url);
-	if (!empty($mwsx_memcache_host)) { 
-		$mem->set($key, $mwsd, 0, $mwsx_memcache_timeout); 
-	}
+	cache_save($cache_key, $mwsd);
     die($mwsd);
 }
 

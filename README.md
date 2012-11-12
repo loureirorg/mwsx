@@ -22,18 +22,21 @@ require_ws("my_ruby/mwsd");
 
 /* _EXPORT_ */
 function my_php_function($a) {
-	return "PHP say: ".my_ruby_function(a);
+	return "PHP say: ".my_ruby_function($a);
 }
 ```
 ```html
 <!-- this file: my_html.html -->
 <script type="text/javascript" src="mwsx.js"></script>
 <script type="text/javascript">
-	ws_include("my_php.php?mwsd");
+	require_ws("my_php.php?mwsd");
+	require_ws("my_ruby/mwsd");
+	
 	alert(my_php_function("World"));
+	alert(my_ruby_function("World"));
 </script>
 ```
-Calling "my_html.html" will popup an alert with "PHP say: Hello World!".
+Calling "my_html.html" will popup an alert with "PHP say: Hello World!" and "Hello World!"
 
 ## Features
 * http/json based communication

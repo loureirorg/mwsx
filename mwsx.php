@@ -43,6 +43,7 @@ function cache_load($key)
 
 function cache_save($key, $value)
 {
+	global $mwsx_memcache_host;
 	global $mwsx_memcache_timeout;
 	
 	if (!empty($mwsx_memcache_host)) {

@@ -1,4 +1,4 @@
-# mwsX - write in a language, run in all
+# mwsX - write in one language, run in all
 
 
 ## What is?

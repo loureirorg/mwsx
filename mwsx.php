@@ -7,7 +7,7 @@
  * Copyleft 2012 - Public Domain
  * Original Author: Daniel Loureiro
  *
- * version 2.0a @ 2012-11-12
+ * version 2.0a @ 2012-11-16
  *
  * https://github.com/loureirorg/mwsx
  *-------------------------------------------------------------------------
@@ -27,12 +27,10 @@ $ws_result = array("result" => null, "error" => null, "warns" => array(), "signa
 
 function cache_load($key)
 {
-	global $mwsx_memcache_host;
+	global $mem;
 	
-	if (!empty($mwsx_memcache_host)) 
+	if ($mem) 
 	{
-		$mem = new Memcache;
-		$mem->addServer($mwsx_memcache_host);
 		$result = $mem->get($key);
 		if ($result !== false) { 
 			return	unserialize($result);
@@ -43,10 +41,10 @@ function cache_load($key)
 
 function cache_save($key, $value)
 {
-	global $mwsx_memcache_host;
 	global $mwsx_memcache_timeout;
+	global $mem;
 	
-	if (!empty($mwsx_memcache_host)) {
+	if ($mem) {
 		$mem->set($key, serialize($value), 0, $mwsx_memcache_timeout); 
 	}
 }
@@ -124,6 +122,15 @@ function signal($signal)
 	$ws_result['signals'][] = $signal;
 }
 
+// cache object
+if ((!empty($mwsx_memcache_host))AND(($_SERVER['QUERY_STRING'] == "mwsd") OR (isset($_REQUEST['mws']))))
+{
+	$mem = new Memcache;
+	$mem->addServer($mwsx_memcache_host);
+}
+else {
+	$mem = null;
+}
 
 if ($_SERVER['QUERY_STRING'] == "mwsd") 
 {

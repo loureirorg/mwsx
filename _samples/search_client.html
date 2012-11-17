@@ -9,31 +9,39 @@
 	<script type="text/javascript">
 		ws_include("search_server.php?mwsd");
 		
-		var pool = 0; // don't overload the server
+		// simple pool control, so we don't overload the server
+		var poolControl = new Array(); 
+		function pool(poolNumber, callback) {
+			if (typeof(poolControl[poolNumber]) == "undefined") poolControl[poolNumber] = {counter: 0, callback: null};
+			if (poolControl[poolNumber].counter == 2) return;
+			poolControl[poolNumber].callback = callback;
+			poolControl[poolNumber].counter++;
+			if (poolControl[poolNumber].counter == 1) callback();
+		}
+		
+		function releasePool(poolNumber) {
+			if (--poolControl[poolNumber].counter) {
+				poolControl[poolNumber].callback();
+			}
+		}
+		
+		// search
 		function send_quest()
 		{
-			if (pool == 2) return;			
-			if (pool == 0) {
-				document.getElementById('searching').innerHTML = '(searching...)';
-				search(
-					document.getElementById('txt').value,
-					function(r){
-						document.getElementById('result').innerHTML = r;
-						if (--pool) {
-							pool = 0;
-							send_quest();
-						}
-						else {
-							document.getElementById('searching').innerHTML = '';
-						}
-					}
-				);
-			}
-			pool++;
+			document.getElementById('searching').innerHTML = '(searching...)';
+			search(
+				document.getElementById('txt').value,
+				function(r) {
+					document.getElementById('result').innerHTML = r;
+					document.getElementById('searching').innerHTML = '<br />';
+					releasePool(0);
+				}
+			);
 		}
 	</script>
-	<input type="text" id="txt" onkeydown="send_quest();"/><br />
-	<p id="searching"></p>
+	
+	<input type="text" id="txt" onkeyup="pool(0, send_quest);"/><br />
+	<p id="searching"><br /></p>
 	Result: <p id='result'></p>
 </body>
 </html>

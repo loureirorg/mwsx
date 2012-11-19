@@ -7,7 +7,7 @@
 	<h1>File upload example</h1>
 	<p>Select one file on your computer, click on submit. Progress bar will run and server will return the internal name.</p>
 	<script type="text/javascript">
-		ws_include("file_upload_server.php?mwsd");
+		ws_include("1_file_upload_server.php?mwsd");
 	</script>
 	<progress min="0" max="100" value="0" id="bar"></progress>
 	<form onsubmit="javascript:upload(document.getElementById('file'),function(r){alert(r);},function(a,b){document.getElementById('bar').value = a/b*100;}); return false;">

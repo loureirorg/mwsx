@@ -85,6 +85,12 @@ function ws_include(url)
 	for (var i in mwsd) {
 		eval(mwsd[i].name+"=function(){return	ws_call('"+mwsd[i].url+"', '"+mwsd[i].args.join(",")+"', arguments);}");
 	}
+	return	true;
+}
+
+function ws_require(url)
+{
+	return	ws_include(url);
 }
 
 function ws_error()

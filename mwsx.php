@@ -216,10 +216,38 @@ function ws($url)
 	return	$obj;
 }
 
+function ws_include($url)
+{	
+	$mwsd = (array)json_decode(http_read($url, ""), true);
+	
+	$sources = array();
+	foreach ($mwsd as $fnc) {
+		$sources[] = "function ".$fnc["name"]."() { return	ws_call('".$fnc["url"]."', '".implode(",", $fnc["args"])."', func_get_args()); }";
+	}	
+	eval(implode("\n", $sources));
+	return	true;
+}
+
+function ws_require($url)
+{
+	return	ws_include($url);
+}
+
 function http_read($url, $raw_post_data)
 {
 	$headers = array();
 
+	// it's a relative url (curl don't support relative url)
+	if (stripos($url, "http") !== 0)
+	{
+		$server_port = ($_SERVER['SERVER_PORT'] == 80) ? "" : $_SERVER['SERVER_PORT'];
+		$s = empty($_SERVER["HTTPS"]) ? "" : ($_SERVER["HTTPS"] == "on") ? "s" : "";
+		$protocol = strtolower(substr($_SERVER["SERVER_PROTOCOL"], 0, strpos($_SERVER["SERVER_PROTOCOL"], "/"))).$s;
+		$absolute_url = $protocol."://".$_SERVER['HTTP_HOST'].$server_port.$_SERVER['PHP_SELF'];
+		$path = pathinfo($_SERVER['PHP_SELF']);
+		$url = substr($absolute_url, 0, strrpos($absolute_url, $path["basename"])).$url;
+	}
+	
 	// cookie
 	if (session_id() == "") {
 		session_start();

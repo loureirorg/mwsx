@@ -10,7 +10,7 @@ require("mwsx.php");
 
 /* _EXPORT_ */
 function my_function($a) {
-	return my_function($a);
+	return my_function("Hello $a");
 }
 ```
 ```html

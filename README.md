@@ -1,5 +1,5 @@
 # mwsX - write in one language, run in all
-
+[![githalytics.com alpha](https://cruel-carlota.pagodabox.com/00c44fb2387137370abf057a0b4906cd "githalytics.com")](http://githalytics.com/loureirorg/mwsx)
 
 ## What is?
 mwsX its a library to remotelly call a function, independent of which language it was written. You can include your PHP file in Javascript and access the PHP functions, or call Ruby methods in PHP, even in different server.

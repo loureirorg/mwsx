@@ -14,7 +14,7 @@
  */
 
 // configuration
-$mwsx_memcache_host = ""; //"myhost.com:port";
+$mwsx_memcache_host = "ec2-54-232-13-113.sa-east-1.compute.amazonaws.com:11211"; //"myhost.com:port";
 $mwsx_memcache_timeout = 60;
  
 // error/warning control
@@ -258,9 +258,9 @@ function http_read($url, $raw_post_data)
 	}
 	
 	// headers
-	$headers[] = "Content-Type: text/xml; charset=utf-8";
+	$headers[] = "Content-Type: application/x-www-form-urlencoded; charset=utf-8";
 	$headers[] = "Expect: ";
-	
+
 	// server comunication
 	$curl = curl_init();
 	curl_setopt($curl, CURLOPT_URL, $url);	

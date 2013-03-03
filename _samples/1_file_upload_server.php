@@ -1,5 +1,5 @@
 <?php
-include_once("../mwsx.php");
+include_once __DIR__. "/../mwsx.php";
 
 /* _EXPORT_ */
 function upload($file)

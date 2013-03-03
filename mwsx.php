@@ -12,10 +12,18 @@
  * https://github.com/loureirorg/mwsx
  *-------------------------------------------------------------------------
  */
+// namespace
+namespace mwsx;
+ 
 // configuration
-$mwsx_cache_apc = true;
-$mwsx_cache_memcache = false; //"myhost.com:port" or false
-$mwsx_cache_timeout = 60;
+$conf["cache"]["mode"] = "off";
+$conf["cache"]["timeout"] = 600;
+if (function_exists("apc_fetch")) {
+	$conf["cache"]["mode"] = "apc";
+}
+if (file_exists(__DIR__. "/mwsx.ini.php")) {
+	$config = parse_ini_file(__DIR__. "/mwsx.ini.php", true);
+}
  
 // error/warning control
 $ws_result = array("result" => null, "error" => null, "warns" => array(), "signals" => array());
@@ -25,16 +33,14 @@ $ws_result = array("result" => null, "error" => null, "warns" => array(), "signa
  */
 function cache_load($key)
 {	
-	global $mwsx_cache_apc;
-	global $mwsx_cache_memcache;
+	global $config;
 	
-	if ($mwsx_cache_memcache) 
+	if ($config["cache"]["mode"] == "memcached")
 	{
 		global $mem;
 		return	$mem->get($key);
 	}
-	
-	if ($mwsx_cache_apc) 
+	elseif ($config["cache"]["mode"] == "apc")
 	{
 		if (apc_exists($key)) {
 			return	apc_fetch($key);
@@ -45,18 +51,15 @@ function cache_load($key)
 
 function cache_save($key, $value)
 {
-	global $mwsx_cache_timeout;
-	global $mwsx_cache_apc;
-	global $mwsx_cache_memcache;
+	global $config;
 	
-	if ($mwsx_cache_memcache)
+	if ($config["cache"]["mode"] == "memcached")
 	{
 		global $mem;
-		$mem->set($key, $value, 0, $mwsx_cache_timeout); 
+		$mem->set($key, $value, 0, $config["cache"]["timeout"]);
 	}
-	
-	if ($mwsx_cache_apc) {
-		apc_store($key, $value, $mwsx_cache_timeout); 
+	elseif ($config["cache"]["mode"] == "apc") {
+		apc_store($key, $value, $config["cache"]["timeout"]);
 	}
 }
  
@@ -69,10 +72,13 @@ function published_functions()
 	$path = pathinfo($_SERVER['PHP_SELF']);
 
 	// try cache first
-	$cache_key = md5($path['basename']. "published_functions". filesize($path['basename']). filemtime($path['basename']));
-	$result = cache_load($cache_key);
-	if ($result !== false) {
-		return	$result;
+	if (($config["cache"]["mode"] != "none") AND ($config["cache"]["mode"] != "off"))
+	{
+		$cache_key = md5($path['basename']. filesize($path['basename']). filemtime($path['basename']). "mwsd");
+		$result = cache_load($cache_key);
+		if ($result !== false) {
+			return	$result;
+		}
 	}
 
 	// cache not found, we'll produce new list based on source
@@ -84,13 +90,13 @@ function published_functions()
 	$str_fncs = $matches[1];
 
 	// split arguments and format in mwsd
-	$args = array_map(create_function('$str_args', 'return	$str_args == ""? array(): explode(",", preg_replace(\'/[\$ \n]/\', \'\', $str_args));' ), $str_args);
+	$args = array_map(create_function('$str_args', 'return	$str_args == ""? array(): explode(",", preg_replace(\'/[\$ \n]/\', \'\', $str_args));'), $str_args);
 	$fncs = array_map(create_function('$a, $b', "return	array('name' => \$a, 'args' => \$b);"), $str_fncs, $args);
 
 	// save cache
 	cache_save($cache_key, $fncs);
 
-	// return list of functions (actually mwsd, but not in json form)
+	// return list of functions (in mwsd, not in json form)
 	return $fncs;
 }
 
@@ -133,11 +139,11 @@ function signal($signal)
 	$ws_result['signals'][] = $signal;
 }
 
-// cache object
-if ($mwsx_cache_memcache AND (array_key_exists("mwsd", $_REQUEST) OR isset($_REQUEST['mws'])))
+// cache mwsd
+if (($config["cache"]["mode"] == "memcached") AND (array_key_exists("mwsd", $_REQUEST) OR isset($_REQUEST['mws'])))
 {
 	$mem = new Memcache;
-	$mem->addServer($mwsx_cache_memcache);
+	$mem->addServer($config["cache"]["memcached_host"]);
 }
 
 if (array_key_exists("mwsd", $_REQUEST)) 
@@ -148,10 +154,14 @@ if (array_key_exists("mwsd", $_REQUEST))
 	$default_url = $protocol. "://". $_SERVER['HTTP_HOST']. $server_port. $_SERVER['PHP_SELF'];
 
 	// try cache
-	$cache_key = md5($default_url."/mwsd");
-	$result = cache_load($cache_key);
-	if ($result !== false) {
-		die($result);
+	if (($config["cache"]["mode"] != "none") AND ($config["cache"]["mode"] != "off"))
+	{
+		$path = pathinfo($_SERVER['PHP_SELF']);
+		$cache_key = md5($path['basename']. filesize($path['basename']). filemtime($path['basename']). "mwsd");
+		$result = cache_load($cache_key);
+		if ($result !== false) {
+			die($result);
+		}
 	}
 	
 	// not in cache, we'll generate
@@ -210,36 +220,78 @@ function ws_call($url, $key_args, $value_args)
 	return	parse_result(http_read($url, json_encode($data)));
 }
  
+ // usage: mwsx\ws($url [, $namespace]);
 function ws($url) 
 {	
-	$mwsd = (array)json_decode(http_read($url, ""), true);
+	// args: $url [, $namespace]
+	$url = func_get_arg(0);
+	if (func_num_args() >= 2) {
+		$namespace = func_get_arg(1);
+	}
 	
-	$sources = array();
-	foreach ($mwsd as $fnc) {
-		$sources[] = "function ".$fnc["name"]."() { return	ws_call('".$fnc["url"]."', '".implode(",", $fnc["args"])."', func_get_args()); }";
-	}	
-	
-	$class = uniqid("class");
-	eval("class $class { ".implode("\n", $sources)." }");
-	$obj = new $class();
+	// try cache
+	$plain_mwsd = http_read($url, "");
+	$temp_name = sys_get_temp_dir(). "/mwsx_". md5($plain_mwsd. $namespace. "ws"). ".php";
+	if (!file_exists($temp_name)) 
+	{
+		// not in cache, create and include file
+		$mwsd = (array)json_decode($plain_mwsd, true);	
+		$sources = array();
+		foreach ($mwsd as $fnc) {
+			$sources[] = "\tfunction ". $fnc["name"]. "()\n\t{\n\t\treturn	\\". __NAMESPACE__. "\\ws_call('". $fnc["url"]. "', '".implode(",", $fnc["args"]). "', func_get_args());\n\t}\n";
+		}
+		if (func_num_args() == 1) {
+			$namespace = uniqid("class_");
+		}
+		$source = "<?php\n";
+		$source .= "class ". $namespace. " {\n". implode("\n", $sources). "}\n";
+		$source .= "\n?>\n";
+		file_put_contents($temp_name, $source);
+	}
+	include_once	$temp_name;
+	$obj = new $namespace();
 	return	$obj;
 }
 
-function ws_include($url)
+// usage: mwsx\ws_include($url [, $namespace]);
+function ws_include()
 {	
-	$mwsd = (array)json_decode(http_read($url, ""), true);
+	// args: $url [, $namespace]
+	$url = func_get_arg(0);
+	if (func_num_args() >= 2) {
+		$namespace = func_get_arg(1);
+	}
 	
-	$sources = array();
-	foreach ($mwsd as $fnc) {
-		$sources[] = "function ". $fnc["name"]. "() { return	ws_call('". $fnc["url"]. "', '".implode(",", $fnc["args"]). "', func_get_args()); }";
-	}	
-	eval(implode("\n", $sources));
+	// try cache
+	$plain_mwsd = http_read($url, "");
+	$temp_name = sys_get_temp_dir(). "/mwsx_". md5($plain_mwsd. $namespace. "ws_include"). ".php";
+	if (!file_exists($temp_name)) 
+	{
+		// not in cache, create and include file
+		$mwsd = (array)json_decode($plain_mwsd, true);	
+		$sources = array();
+		foreach ($mwsd as $fnc) {
+			$sources[] = "function ". $fnc["name"]. "()\n{\n\treturn	\\". __NAMESPACE__. "\\ws_call('". $fnc["url"]. "', '".implode(",", $fnc["args"]). "', func_get_args());\n}\n";
+		}
+		$source = "<?php\n";
+		if (isset($namespace)) {
+			$source .= "namespace ". $namespace. ";\n";
+		}
+		$source .= implode("\n", $sources) ."\n?>\n";
+		file_put_contents($temp_name, $source);
+	}
+	include_once	$temp_name;
 	return	true;
 }
 
-function ws_require($url)
+// usage: mwsx\ws_require($url [, $namespace]);
+function ws_require()
 {
-	return	ws_include($url);
+	// args: $url [, $namespace]
+	if (func_num_args() == 1) {
+		return	ws_include(func_get_arg(0));
+	}
+	return	ws_include(func_get_arg(0), func_get_arg(1));
 }
 
 function http_read($url, $raw_post_data)

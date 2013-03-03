@@ -1,6 +1,6 @@
 <?php
-include_once("../mwsx.php");
-ws_include("3_php_server.php?mwsd"); // don't need stay at the same server
+include_once __DIR__. "/../mwsx.php";
+mwsx\ws_include("3_php_server.php?mwsd"); // don't need stay at the same server
 
 ?>
 <html>

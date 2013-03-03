@@ -1,12 +1,12 @@
 <?php
-include_once("../mwsx.php");
+include_once __DIR__. "/../mwsx.php";
 
 /* _EXPORT_ */
 function login($username)
 {
 	// only characters/numbers/underscore/space accepted
 	if ($username != preg_replace("/[^A-Za-z0-9_ ]/", "", $username)) {
-		error("Only characters/numbers/underscore/space are accepted in username.");
+		mwsx/error("Only characters/numbers/underscore/space are accepted in username.");
 	}
 	
 	// user session
@@ -22,7 +22,7 @@ function login($username)
 	
 	// database creation failed
 	if (!file_exists($db_path)) {
-		error("We have not permission to write on $db_path.");
+		mwsx/error("We have not permission to write on $db_path.");
 	}
 	
 	// success
@@ -42,7 +42,7 @@ function send_to($to, $message)
 {
 	session_start();
 	if (!isset($_SESSION["username"])) {
-		error("You need to register first.");
+		mwsx/error("You need to register first.");
 	}
 	
 	// save in our "database"

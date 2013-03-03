@@ -7,33 +7,37 @@
  * Copyleft 2012 - Public Domain
  * Original Author: Daniel Loureiro
  *
- * version 2.0a @ 2012-12-20
+ * version 2.0a @ 2013-03-02
  *
  * https://github.com/loureirorg/mwsx
  *-------------------------------------------------------------------------
  */
-
 // configuration
-$mwsx_memcache_host = ""; //"myhost.com:port";
-$mwsx_memcache_timeout = 60;
+$mwsx_cache_apc = true;
+$mwsx_cache_memcache = false; //"myhost.com:port" or false
+$mwsx_cache_timeout = 60;
  
 // error/warning control
-global $ws_result;
 $ws_result = array("result" => null, "error" => null, "warns" => array(), "signals" => array());
 
 /*
  * SERVER
  */
-
 function cache_load($key)
-{
-	global $mem;
+{	
+	global $mwsx_cache_apc;
+	global $mwsx_cache_memcache;
 	
-	if ($mem) 
+	if ($mwsx_cache_memcache) 
 	{
-		$result = $mem->get($key);
-		if ($result !== false) { 
-			return	unserialize($result);
+		global $mem;
+		return	$mem->get($key);
+	}
+	
+	if ($mwsx_cache_apc) 
+	{
+		if (apc_exists($key)) {
+			return	apc_fetch($key);
 		}
 	}
 	return false;
@@ -41,11 +45,18 @@ function cache_load($key)
 
 function cache_save($key, $value)
 {
-	global $mwsx_memcache_timeout;
-	global $mem;
+	global $mwsx_cache_timeout;
+	global $mwsx_cache_apc;
+	global $mwsx_cache_memcache;
 	
-	if ($mem) {
-		$mem->set($key, serialize($value), 0, $mwsx_memcache_timeout); 
+	if ($mwsx_cache_memcache)
+	{
+		global $mem;
+		$mem->set($key, $value, 0, $mwsx_cache_timeout); 
+	}
+	
+	if ($mwsx_cache_apc) {
+		apc_store($key, $value, $mwsx_cache_timeout); 
 	}
 }
  
@@ -58,7 +69,7 @@ function published_functions()
 	$path = pathinfo($_SERVER['PHP_SELF']);
 
 	// try cache first
-	$cache_key = md5($path['basename']. "/published");
+	$cache_key = md5($path['basename']. "published_functions". filesize($path['basename']). filemtime($path['basename']));
 	$result = cache_load($cache_key);
 	if ($result !== false) {
 		return	$result;
@@ -68,7 +79,7 @@ function published_functions()
 	$source = file_get_contents($path['basename']);
 
 	// list of published functions
-	preg_match_all('/\/\* _EXPORT_ \*\/[ \t\r\n]*function[ \t\r\n]?(.+)[ \t\r\n]*\((.*)\)/', $source, $matches);
+	preg_match_all('/\/\* _EXPORT_ \*\/[ \t\r\n]*function[ \t\r\n]?(.+)[ \t\r\n]*\(([^\)]*)\)/', $source, $matches);
 	$str_args = $matches[2];
 	$str_fncs = $matches[1];
 
@@ -123,13 +134,10 @@ function signal($signal)
 }
 
 // cache object
-if ((!empty($mwsx_memcache_host))AND((array_key_exists("mwsd", $_REQUEST)) OR (isset($_REQUEST['mws']))))
+if ($mwsx_cache_memcache AND (array_key_exists("mwsd", $_REQUEST) OR isset($_REQUEST['mws'])))
 {
 	$mem = new Memcache;
-	$mem->addServer($mwsx_memcache_host);
-}
-else {
-	$mem = null;
+	$mem->addServer($mwsx_cache_memcache);
 }
 
 if (array_key_exists("mwsd", $_REQUEST)) 

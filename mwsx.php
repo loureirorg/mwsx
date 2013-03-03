@@ -16,34 +16,34 @@
 namespace mwsx;
  
 // configuration
-$conf["cache"]["mode"] = "off";
-$conf["cache"]["timeout"] = 600;
+$mwsx_config["cache"]["mode"] = "off";
+$mwsx_config["cache"]["timeout"] = 600;
 if (function_exists("apc_fetch")) {
-	$conf["cache"]["mode"] = "apc";
+	$mwsx_config["cache"]["mode"] = "apc";
 }
 if (file_exists(__DIR__. "/mwsx.ini.php")) {
-	$config = parse_ini_file(__DIR__. "/mwsx.ini.php", true);
+	$mwsx_config = parse_ini_file(__DIR__. "/mwsx.ini.php", true);
 }
  
 // error/warning control
-$ws_result = array("result" => null, "error" => null, "warns" => array(), "signals" => array());
+$mwsx_result = array("result" => null, "error" => null, "warns" => array(), "signals" => array());
 
 /*
  * SERVER
  */
 function cache_load($key)
 {	
-	global $config;
+	global $mwsx_config;
 	
-	if ($config["cache"]["mode"] == "memcached")
+	if ($mwsx_config["cache"]["mode"] == "memcached")
 	{
-		global $mem;
-		return	$mem->get($key);
+		global $mwsx_memcached;
+		return	$mwsx_memcached->get($key);
 	}
-	elseif ($config["cache"]["mode"] == "apc")
+	elseif ($mwsx_config["cache"]["mode"] == "apc")
 	{
 		if (apc_exists($key)) {
-			return	apc_fetch($key);
+			return	apc_fetch(unserialize($key));
 		}
 	}
 	return false;
@@ -51,15 +51,15 @@ function cache_load($key)
 
 function cache_save($key, $value)
 {
-	global $config;
+	global $mwsx_config;
 	
-	if ($config["cache"]["mode"] == "memcached")
+	if ($mwsx_config["cache"]["mode"] == "memcached")
 	{
-		global $mem;
-		$mem->set($key, $value, 0, $config["cache"]["timeout"]);
+		global $mwsx_memcached;
+		$mwsx_memcached->set($key, $value, 0, $mwsx_config["cache"]["timeout"]);
 	}
-	elseif ($config["cache"]["mode"] == "apc") {
-		apc_store($key, $value, $config["cache"]["timeout"]);
+	elseif ($mwsx_config["cache"]["mode"] == "apc") {
+		apc_store($key, serialize($value), $mwsx_config["cache"]["timeout"]);
 	}
 }
  
@@ -72,9 +72,9 @@ function published_functions()
 	$path = pathinfo($_SERVER['PHP_SELF']);
 
 	// try cache first
-	if (($config["cache"]["mode"] != "none") AND ($config["cache"]["mode"] != "off"))
+	if (($mwsx_config["cache"]["mode"] != "none") AND ($mwsx_config["cache"]["mode"] != "off"))
 	{
-		$cache_key = md5($path['basename']. filesize($path['basename']). filemtime($path['basename']). "mwsd");
+		$cache_key = md5($_SERVER["PHP_SELF"]. filesize($path['basename']). filemtime($path['basename']). "mwsd");
 		$result = cache_load($cache_key);
 		if ($result !== false) {
 			return	$result;
@@ -120,30 +120,30 @@ function error($msg)
 	error_log(date("Y-m-d H:i:s"). "; ". $_SERVER['REMOTE_ADDR']. "; ". $msg. ";");
 
 	// stop script and report error
-	global $ws_result;
-	$ws_result = array("result" => null, "error" => $msg, "warns" => array(), "signals" => $ws_result['signals']);
-	die(json_encode($ws_result));
+	global $mwsx_result;
+	$mwsx_result = array("result" => null, "error" => $msg, "warns" => array(), "signals" => $mwsx_result['signals']);
+	die(json_encode($mwsx_result));
 }
 
 
 function warn($msg) 
 {
-	global $ws_result;
-	$ws_result['warns'][] = $msg;
+	global $mwsx_result;
+	$mwsx_result['warns'][] = $msg;
 }
 
 
 function signal($signal) 
 {
-	global $ws_result;
-	$ws_result['signals'][] = $signal;
+	global $mwsx_result;
+	$mwsx_result['signals'][] = $signal;
 }
 
 // cache mwsd
-if (($config["cache"]["mode"] == "memcached") AND (array_key_exists("mwsd", $_REQUEST) OR isset($_REQUEST['mws'])))
+if (($mwsx_config["cache"]["mode"] == "memcached") AND (array_key_exists("mwsd", $_REQUEST) OR isset($_REQUEST['mws'])))
 {
-	$mem = new Memcache;
-	$mem->addServer($config["cache"]["memcached_host"]);
+	$mwsx_memcached = new Memcache;
+	$mwsx_memcached->addServer($mwsx_config["cache"]["memcached_host"]);
 }
 
 if (array_key_exists("mwsd", $_REQUEST)) 
@@ -154,10 +154,10 @@ if (array_key_exists("mwsd", $_REQUEST))
 	$default_url = $protocol. "://". $_SERVER['HTTP_HOST']. $server_port. $_SERVER['PHP_SELF'];
 
 	// try cache
-	if (($config["cache"]["mode"] != "none") AND ($config["cache"]["mode"] != "off"))
+	if (($mwsx_config["cache"]["mode"] != "none") AND ($mwsx_config["cache"]["mode"] != "off"))
 	{
 		$path = pathinfo($_SERVER['PHP_SELF']);
-		$cache_key = md5($path['basename']. filesize($path['basename']). filemtime($path['basename']). "mwsd");
+		$cache_key = md5($_SERVER["PHP_SELF"]. filesize($path['basename']). filemtime($path['basename']). "mwsd");
 		$result = cache_load($cache_key);
 		if ($result !== false) {
 			die($result);
@@ -193,8 +193,8 @@ elseif (isset($_REQUEST['mws']))
 	}
 	
 	// calling function, show results in mwsx style
-	$ws_result['result'] = call_user_func_array($_REQUEST['mws'], $ordered_args);
- 	die(json_encode($ws_result));
+	$mwsx_result['result'] = call_user_func_array($_REQUEST['mws'], $ordered_args);
+ 	die(json_encode($mwsx_result));
 }
 
 
@@ -204,8 +204,8 @@ elseif (isset($_REQUEST['mws']))
 function parse_result($result)
 {
 	$content = (array)json_decode($result, true);
-	global $ws_result;
-	$ws_result = array("result" => $content['result'], "error" => $content['error'], "warns" => $content['warns'], "signals" => $content['signals']);
+	global $mwsx_result;
+	$mwsx_result = array("result" => $content['result'], "error" => $content['error'], "warns" => $content['warns'], "signals" => $content['signals']);
 	return	$content['result'];
 }
 
@@ -351,26 +351,26 @@ function http_read($url, $raw_post_data)
  
 function ws_error()
 {
-	global $ws_result;
-	return	$ws_result['error'];
+	global $mwsx_result;
+	return	$mwsx_result['error'];
 }
 
 function ws_fetch_warn()
 {
-	global $ws_result;
-	return	array_pop($ws_result['warns']);
+	global $mwsx_result;
+	return	array_pop($mwsx_result['warns']);
 }
 
 function ws_warns()
 {
-	global $ws_result;
-	return	$ws_result['warns'];
+	global $mwsx_result;
+	return	$mwsx_result['warns'];
 }
 
 function ws_has_signal($signal)
 {
-	global $ws_result;
-	return	in_array($signal, $ws_result['signals']);
+	global $mwsx_result;
+	return	in_array($signal, $mwsx_result['signals']);
 }
 
 ?>

@@ -15,14 +15,17 @@
 // namespace
 namespace mwsx;
  
-// configuration
-$mwsx_config["cache"]["mode"] = "off";
-$mwsx_config["cache"]["timeout"] = 600;
-if (function_exists("apc_fetch")) {
-	$mwsx_config["cache"]["mode"] = "apc";
-}
-if (file_exists(__DIR__. "/mwsx.ini.php")) {
-	$mwsx_config = parse_ini_file(__DIR__. "/mwsx.ini.php", true);
+// configuration (we'll use only when calling mwsd or mws)
+if (isset($_REQUEST["mwsd"]) OR isset($_REQUEST["mws"]))
+{
+	$mwsx_config["cache"]["mode"] = "off";
+	$mwsx_config["cache"]["timeout"] = 600;
+	if (function_exists("apc_fetch")) {
+		$mwsx_config["cache"]["mode"] = "apc";
+	}
+	if (file_exists(__DIR__. "/mwsx.ini.php")) {
+		$mwsx_config = parse_ini_file(__DIR__. "/mwsx.ini.php", true);
+	}
 }
  
 // error/warning control
@@ -84,6 +87,12 @@ function published_functions()
 	// cache not found, we'll produce new list based on source
 	$source = file_get_contents($path['basename']);
 
+	// namespace
+	$namespace = "";
+	if (preg_match('/namespace[ \t\r\n]*([^ \t\r\n;]*)/i', $source, $matches)) {
+		$namespace = $matches[1];
+	}
+	
 	// list of published functions
 	preg_match_all('/\/\* _EXPORT_ \*\/[ \t\r\n]*function[ \t\r\n]?(.+)[ \t\r\n]*\(([^\)]*)\)/', $source, $matches);
 	$str_args = $matches[2];
@@ -96,8 +105,8 @@ function published_functions()
 	// save cache
 	cache_save($cache_key, $fncs);
 
-	// return list of functions (in mwsd, not in json form)
-	return $fncs;
+	// return list of functions (not in json form)
+	return	array("namespace" => $namespace, "fncs" => $fncs);
 }
 
 
@@ -121,7 +130,7 @@ function error($msg)
 
 	// stop script and report error
 	global $mwsx_result;
-	$mwsx_result = array("result" => null, "error" => $msg, "warns" => array(), "signals" => $mwsx_result['signals']);
+	$mwsx_result = array("result" => null, "error" => $msg, "warns" => array(), "signals" => $mwsx_result["signals"]);
 	die(json_encode($mwsx_result));
 }
 
@@ -139,8 +148,8 @@ function signal($signal)
 	$mwsx_result['signals'][] = $signal;
 }
 
-// cache mwsd
-if (($mwsx_config["cache"]["mode"] == "memcached") AND (array_key_exists("mwsd", $_REQUEST) OR isset($_REQUEST['mws'])))
+// cache memcache: add server
+if ((isset($_REQUEST["mwsd"]) OR isset($_REQUEST["mws"])) AND ($mwsx_config["cache"]["mode"] == "memcached"))
 {
 	$mwsx_memcached = new Memcache;
 	$mwsx_memcached->addServer($mwsx_config["cache"]["memcached_host"]);
@@ -165,7 +174,8 @@ if (array_key_exists("mwsd", $_REQUEST))
 	}
 	
 	// not in cache, we'll generate
-	$fncs = published_functions();
+	$pf = published_functions();
+	$fncs = $pf["fncs"];
 	$fncs_with_url = array_map(create_function('$item', '$item["url"] = "'. $default_url. '?mws=".$item["name"]; return	$item;'), $fncs);
 	$mwsd = json_encode($fncs_with_url);
 	cache_save($cache_key, $mwsd);
@@ -175,7 +185,9 @@ if (array_key_exists("mwsd", $_REQUEST))
 elseif (isset($_REQUEST['mws']))
 {
  	// calling a method
-    $fncs = published_functions();
+    $pf = published_functions();
+	$namespace = $pf["namespace"]? ($pf["namespace"]. "\\"): "";
+	$fncs = $pf["fncs"];
 	$fnc = array_filter($fncs, create_function('$item', 'return	$item["name"] == "'.$_REQUEST['mws'].'";'));
 	if ($fnc == array()) {
 		error("MWSX: function ".$_REQUEST['mws']." not found !");
@@ -193,7 +205,7 @@ elseif (isset($_REQUEST['mws']))
 	}
 	
 	// calling function, show results in mwsx style
-	$mwsx_result['result'] = call_user_func_array($_REQUEST['mws'], $ordered_args);
+	$mwsx_result['result'] = call_user_func_array($namespace. $_REQUEST['mws'], $ordered_args);
  	die(json_encode($mwsx_result));
 }
 
@@ -203,8 +215,11 @@ elseif (isset($_REQUEST['mws']))
  */
 function parse_result($result)
 {
-	$content = (array)json_decode($result, true);
 	global $mwsx_result;
+	$content = (array)json_decode($result, true);
+	if (!array_key_exists("result", $content)) {
+		return	array("result" => "", "error" => $result, "warns" => "", "signals" => "UNKNOWN ERROR");
+	}
 	$mwsx_result = array("result" => $content['result'], "error" => $content['error'], "warns" => $content['warns'], "signals" => $content['signals']);
 	return	$content['result'];
 }

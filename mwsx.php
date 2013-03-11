@@ -102,7 +102,7 @@ function published_functions()
 	$str_fncs = $matches[1];
 
 	// split arguments and format in mwsd
-	$args = array_map(create_function('$str_args', 'return	$str_args == ""? array(): explode(",", preg_replace(\'/[\$ \n]/\', \'\', $str_args));'), $str_args);
+	$args = array_map(create_function('$str_args', 'return	$str_args == ""? array(): explode(",", preg_replace(\'/[\$ \n\r\t]/\', \'\', $str_args));'), $str_args);
 	$fncs = array_map(create_function('$a, $b', "return	array('name' => \$a, 'args' => \$b);"), $str_fncs, $args);
 
 	// save cache

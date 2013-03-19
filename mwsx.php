@@ -146,71 +146,81 @@ function warn($msg)
 }
 
 
-function signal($signal) 
+function signal($signal)
 {
 	global $mwsx_result;
 	$mwsx_result['signals'][] = $signal;
 }
 
-// cache memcache: add server
-if ((isset($_REQUEST["mwsd"]) OR isset($_REQUEST["mws"])) AND ($mwsx_config["cache"]["mode"] == "memcached"))
-{
-	$mwsx_memcached = new Memcache;
-	$mwsx_memcached->addServer($mwsx_config["cache"]["memcached_host"]);
+if (isset($_REQUEST["mwsd"]) OR isset($_REQUEST["mws"])) {
+	$__mwsx = new before_die_callback();
 }
 
-if (array_key_exists("mwsd", $_REQUEST)) 
+class before_die_callback 
 {
- 	// mwsd request (list of funtions)
-	$protocol = ((array_key_exists('HTTPS', $_SERVER)) AND ($_SERVER['HTTPS'] == 'on'))? "https": "http";
-	$server_port = (($_SERVER['SERVER_PORT'] == 80) OR ($_SERVER['SERVER_PORT'] == 443))? "": ":".$_SERVER['SERVER_PORT'];
-	$default_url = $protocol. "://". $_SERVER['HTTP_HOST']. $server_port. $_SERVER['PHP_SELF'];
-
-	// try cache
-	if (($mwsx_config["cache"]["mode"] != "none") AND ($mwsx_config["cache"]["mode"] != "off"))
+	function __destruct() 
 	{
-		$path = $_SERVER['DOCUMENT_ROOT']. substr($_SERVER['PHP_SELF'], 1);
-		$cache_key = md5($path. filesize($path). filemtime($path). "mwsd");
-		$result = cache_load($cache_key);
-		if ($result !== false) {
-			die($result);
+		// cache memcache: add server
+		if ($mwsx_config["cache"]["mode"] == "memcached")
+		{
+			$mwsx_memcached = new Memcache;
+			$mwsx_memcached->addServer($mwsx_config["cache"]["memcached_host"]);
+		}
+
+		if (array_key_exists("mwsd", $_REQUEST)) 
+		{
+			// mwsd request (list of funtions)
+			$protocol = ((array_key_exists("HTTPS", $_SERVER)) AND ($_SERVER["HTTPS"] == 'on'))? "https": "http";
+			$server_port = (($_SERVER["SERVER_PORT"] == 80) OR ($_SERVER["SERVER_PORT"] == 443))? "": ":".$_SERVER["SERVER_PORT"];
+			$default_url = $protocol. "://". $_SERVER["HTTP_HOST"]. $server_port. $_SERVER["PHP_SELF"];
+
+			// try cache
+			if (($mwsx_config["cache"]["mode"] != "none") AND ($mwsx_config["cache"]["mode"] != "off"))
+			{
+				$path = $_SERVER["DOCUMENT_ROOT"]. substr($_SERVER["PHP_SELF"], 1);
+				$cache_key = md5($path. filesize($path). filemtime($path). "mwsd");
+				$result = cache_load($cache_key);
+				if ($result !== false) {
+					die($result);
+				}
+			}
+			
+			// not in cache, we'll generate
+			$pf = published_functions();
+			$fncs = $pf["fncs"];
+			$fncs_with_url = array_map(create_function('$item', '$item["url"] = "'. $default_url. '?mws=".$item["name"]; return	$item;'), $fncs);
+			$mwsd = json_encode($fncs_with_url);
+			cache_save($cache_key, $mwsd);
+			die($mwsd);
+		}
+
+		elseif (isset($_REQUEST["mws"]))
+		{
+			// calling a method
+			$pf = published_functions();
+			$namespace = $pf["namespace"]? ($pf["namespace"]. "\\"): "\\";
+			$fncs = $pf["fncs"];
+			$fnc = array_filter($fncs, create_function('$item', 'return	$item["name"] == "'.$_REQUEST['mws'].'";'));
+			if ($fnc == array()) {
+				error("MWSX: function ".$_REQUEST['mws']." not found !");
+			}
+			$fnc = array_pop($fnc);
+			
+			// order arguments in the same order of source
+			$ordered_args = array();
+			if ($fnc['args'] != array())
+			{
+				$data = get_data();
+				foreach ($fnc['args'] as $arg) {
+					$ordered_args[] = $data[$arg];
+				}
+			}
+			
+			// calling function, show results in mwsx style
+			$mwsx_result['result'] = call_user_func_array($namespace. $_REQUEST['mws'], $ordered_args);
+			die(json_encode($mwsx_result));
 		}
 	}
-	
-	// not in cache, we'll generate
-	$pf = published_functions();
-	$fncs = $pf["fncs"];
-	$fncs_with_url = array_map(create_function('$item', '$item["url"] = "'. $default_url. '?mws=".$item["name"]; return	$item;'), $fncs);
-	$mwsd = json_encode($fncs_with_url);
-	cache_save($cache_key, $mwsd);
-    die($mwsd);
-}
-
-elseif (isset($_REQUEST['mws']))
-{
- 	// calling a method
-    $pf = published_functions();
-	$namespace = $pf["namespace"]? ($pf["namespace"]. "\\"): "";
-	$fncs = $pf["fncs"];
-	$fnc = array_filter($fncs, create_function('$item', 'return	$item["name"] == "'.$_REQUEST['mws'].'";'));
-	if ($fnc == array()) {
-		error("MWSX: function ".$_REQUEST['mws']." not found !");
-	}
-	$fnc = array_pop($fnc);
-	
-	// order arguments in the same order of source
-   	$ordered_args = array();
-	if ($fnc['args'] != array())
-	{
-		$data = get_data();
-    	foreach ($fnc['args'] as $arg) {
-        	$ordered_args[] = $data[$arg];
-		}
-	}
-	
-	// calling function, show results in mwsx style
-	$mwsx_result['result'] = call_user_func_array($namespace. $_REQUEST['mws'], $ordered_args);
- 	die(json_encode($mwsx_result));
 }
 
 

@@ -13,10 +13,10 @@
  *-------------------------------------------------------------------------
  */
 namespace mwsx;
- 
-// configuration (we'll use only when calling mwsd or mws)
-if (isset($_REQUEST["mwsd"]) OR isset($_REQUEST["mws"]))
+
+if (isset($_REQUEST["mwsd"]) OR isset($_REQUEST["mws"])) 
 {
+	// configuration (we'll use only when calling mwsd or mws)
 	$mwsx_config["cache"]["mode"] = "off";
 	$mwsx_config["cache"]["timeout"] = 600;
 	if (function_exists("apc_fetch")) {
@@ -25,14 +25,18 @@ if (isset($_REQUEST["mwsd"]) OR isset($_REQUEST["mws"]))
 	if (file_exists(__DIR__. "/mwsx.ini.php")) {
 		$mwsx_config = parse_ini_file(__DIR__. "/mwsx.ini.php", true);
 	}
+
+	// clean _REQUEST, minimizing accidental calls
+	$mwsx_request = get_data();
+	$_REQUEST = array();
+	
+	// process mws / mwsd after all code, so we can discover all declared functions
+	$__mwsx = new before_die_callback();
 }
  
 // error/warning control
 $mwsx_result = array("result" => null, "error" => null, "warns" => array(), "signals" => array());
 
-// include_once style
-$mwsx_ws_included = array();
-$mwsx_included = array();
 
 /*
  * SERVER
@@ -152,14 +156,15 @@ function signal($signal)
 	$mwsx_result['signals'][] = $signal;
 }
 
-if (isset($_REQUEST["mwsd"]) OR isset($_REQUEST["mws"])) {
-	$__mwsx = new before_die_callback();
-}
-
 class before_die_callback 
 {
 	function __destruct() 
 	{
+		global $mwsx_config;
+		global $mwsx_request;
+		
+		$_REQUEST = $mwsx_request;
+		
 		// cache memcache: add server
 		if ($mwsx_config["cache"]["mode"] == "memcached")
 		{
@@ -167,7 +172,7 @@ class before_die_callback
 			$mwsx_memcached->addServer($mwsx_config["cache"]["memcached_host"]);
 		}
 
-		if (array_key_exists("mwsd", $_REQUEST)) 
+		if (isset($_REQUEST["mwsd"])) 
 		{
 			// mwsd request (list of funtions)
 			$protocol = ((array_key_exists("HTTPS", $_SERVER)) AND ($_SERVER["HTTPS"] == 'on'))? "https": "http";
@@ -200,24 +205,23 @@ class before_die_callback
 			$pf = published_functions();
 			$namespace = $pf["namespace"]? ($pf["namespace"]. "\\"): "\\";
 			$fncs = $pf["fncs"];
-			$fnc = array_filter($fncs, create_function('$item', 'return	$item["name"] == "'.$_REQUEST['mws'].'";'));
+			$fnc = array_filter($fncs, create_function('$item', 'return	$item["name"] == "'. $_REQUEST["mws"]. '";'));
 			if ($fnc == array()) {
-				error("MWSX: function ".$_REQUEST['mws']." not found !");
+				error("MWSX: function ". $_REQUEST["mws"]. " not found !");
 			}
 			$fnc = array_pop($fnc);
 			
 			// order arguments in the same order of source
 			$ordered_args = array();
-			if ($fnc['args'] != array())
+			if (count($fnc["args"]))
 			{
-				$data = get_data();
-				foreach ($fnc['args'] as $arg) {
-					$ordered_args[] = $data[$arg];
+				foreach ($fnc["args"] as $arg) {
+					$ordered_args[] = $mwsx_request[$arg];
 				}
 			}
 			
 			// calling function, show results in mwsx style
-			$mwsx_result['result'] = call_user_func_array($namespace. $_REQUEST['mws'], $ordered_args);
+			$mwsx_result["result"] = call_user_func_array($namespace. $_REQUEST["mws"], $ordered_args);
 			die(json_encode($mwsx_result));
 		}
 	}
@@ -227,6 +231,9 @@ class before_die_callback
 /*
  * CLIENT
  */
+$mwsx_ws_included = array(); // include_once style
+$mwsx_included = array(); // include_once style
+
 function parse_result($result)
 {
 	global $mwsx_result;

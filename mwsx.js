@@ -63,8 +63,21 @@ function ws_call(url, key_args, value_args)
 		while (typeof(value_args[j]) == "function") { 
 			callback[icb++] = value_args[j++];
 		}
-		if (j < len) {
-			data[key_args[i]] = value_args[j++];
+		if (j < len) 
+		{
+			if (i < key_args.length) {
+				data[key_args[i]] = value_args[j++];
+			}
+			else 
+			{
+				// overflow values: send as individual vars
+				var lst_str = value_args[j++].split("&");
+				for (var i_str in lst_str)
+				{
+					var a_var = lst_str[i_str].split("=");
+					data[a_var[0]] = a_var[1];
+				}
+			}
 		}
 	}
 	var response = http_read(url, data, callback[0], callback[1]);

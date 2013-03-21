@@ -17,6 +17,7 @@ namespace mwsx;
 if (isset($_REQUEST["mwsd"]) OR isset($_REQUEST["mws"])) 
 {
 	// configuration (we'll use only when calling mwsd or mws)
+	$mwsx_config["general"]["stop_at_include"] = true;
 	$mwsx_config["cache"]["mode"] = "off";
 	$mwsx_config["cache"]["timeout"] = 600;
 	if (function_exists("apc_fetch")) {
@@ -32,6 +33,9 @@ if (isset($_REQUEST["mwsd"]) OR isset($_REQUEST["mws"]))
 	
 	// process mws / mwsd after all code, so we can discover all declared functions
 	$__mwsx = new before_die_callback();
+	if ($mwsx_config["general"]["stop_at_include"]) {
+		unset($__mwsx);
+	}
 }
  
 // error/warning control
@@ -79,7 +83,7 @@ function cache_save($key, $value)
  */
 function published_functions() 
 {	
-	$path = $_SERVER['DOCUMENT_ROOT']. substr($_SERVER['PHP_SELF'], 1);
+	$path = $_SERVER["DOCUMENT_ROOT"]. substr($_SERVER["PHP_SELF"], 1);
 
 	// try cache first
 	if (($mwsx_config["cache"]["mode"] != "none") AND ($mwsx_config["cache"]["mode"] != "off"))
@@ -223,7 +227,7 @@ class before_die_callback
 			// calling function, show results in mwsx style
 			$mwsx_result["result"] = call_user_func_array($namespace. $_REQUEST["mws"], $ordered_args);
 			die(json_encode($mwsx_result));
-		}
+		}		
 	}
 }
 
@@ -244,14 +248,14 @@ function parse_result($result)
 		$mwsx_result = array("result" => "", "error" => "UNKNOWN ERROR [return ". $result ."]", "warns" => "", "signals" => "UNKNOWN ERROR");
 		return	null;
 	}
-	$mwsx_result = array("result" => $content['result'], "error" => $content['error'], "warns" => $content['warns'], "signals" => $content['signals']);
-	return	$content['result'];
+	$mwsx_result = array("result" => $content["result"], "error" => $content["error"], "warns" => $content["warns"], "signals" => $content["signals"]);
+	return	$content["result"];
 }
 
  
 function ws_call($url, $key_args, $value_args)
 {
-	$key_args = explode(',', $key_args);
+	$key_args = explode(",", $key_args);
 	$data = array();
 	foreach ($key_args as $i => $key_arg) {
 		$data[$key_arg] = $value_args[$i];
@@ -351,8 +355,6 @@ function ws_require()
 
 function http_read($url, $raw_post_data)
 {
-	$headers = array();
-
 	// it's a relative url (curl don't support relative url)
 	if (stripos($url, "http") !== 0)
 	{
@@ -363,45 +365,54 @@ function http_read($url, $raw_post_data)
 		$url = substr($absolute_url, 0, strrpos($absolute_url, $path["basename"])).$url;
 	}
 	
+	// headers
+	$headers = array(
+		"Content-Type: text/xml; charset=utf-8",
+		"Expect: ",
+	);
+
 	// cookie
 	if (session_id() == "") {
 		session_start();
 	}
-	$ws_cookie = (array_key_exists('ws_cookie', $_SESSION)) ? $_SESSION['ws_cookie'] : null;
-	if ($ws_cookie != null) {
-		$headers[] = 'Cookie: '.$ws_cookie;
+	if (!array_key_exists("mwsx_cookie", $_SESSION)) {
+		$_SESSION["mwsx_cookie"] = array();
 	}
-	
-	// headers
-	$headers[] = "Content-Type: text/xml; charset=utf-8";
-	$headers[] = "Expect: ";
+	if (count($_SESSION["mwsx_cookie"])) 
+	{
+		$array = array_map(
+			create_function('$k, $v', 'return "$k=$v";'), 
+			array_keys($_SESSION["mwsx_cookie"]), 
+			array_values($_SESSION["mwsx_cookie"])
+		);
+		$headers[] = "Cookie: ". implode("; ", $array);
+	}
 	
 	// server comunication
-	$curl = curl_init();
-	curl_setopt($curl, CURLOPT_URL, $url);	
-	curl_setopt($curl, CURLOPT_HTTPHEADER, $headers);
-	curl_setopt($curl, CURLOPT_HEADER, true); 
-	curl_setopt($curl, CURLOPT_POST, true);
-	curl_setopt($curl, CURLOPT_POSTFIELDS, $raw_post_data);
-	curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
-	curl_setopt($curl, CURLOPT_TIMEOUT, 15);
-	curl_setopt($curl, CURLOPT_SSL_VERIFYPEER, false);
-	$result = curl_exec($curl);
-	curl_close($curl);
+	global $mwsx_curl;
+	if (!isset($mwsx_curl)) {
+		$mwsx_curl = curl_init();
+	}
+	curl_setopt($mwsx_curl, CURLOPT_URL, $url);	
+	curl_setopt($mwsx_curl, CURLOPT_HTTPHEADER, $headers);
+	curl_setopt($mwsx_curl, CURLOPT_HEADER, true); 
+	curl_setopt($mwsx_curl, CURLOPT_POST, true);
+	curl_setopt($mwsx_curl, CURLOPT_POSTFIELDS, $raw_post_data);
+	curl_setopt($mwsx_curl, CURLOPT_RETURNTRANSFER, true);
+	curl_setopt($mwsx_curl, CURLOPT_TIMEOUT, 120);
+	curl_setopt($mwsx_curl, CURLOPT_SSL_VERIFYPEER, false);
+	$result = curl_exec($mwsx_curl);
 	
 	// head + body split
-	$buffer = explode("\r\n\r\n", $result, 2);
+	list($head, $body) = explode("\r\n\r\n", $result, 2);
 
 	// cookies
-	$cookie_pos = strpos($buffer[0], 'Set-Cookie');
-	if ($cookie_pos !== false) 
-	{
-		$value_pos_start = $cookie_pos+strlen('Set-Cookie: ');
-		$_SESSION['ws_cookie'] = substr($buffer[0], $value_pos_start, strpos($buffer[0], ';', $cookie_pos)-$value_pos_start);
+	if (preg_match_all('#Set-Cookie: ([^=]*)=([^;]*);.*#', $head, $matches)) {
+		$_SESSION["mwsx_cookie"] = array_merge($_SESSION["mwsx_cookie"], array_combine($matches[1], $matches[2]));
 	}
 	
-	// only returns the body
-	return $buffer[1];
+	// returns the body
+	return	$body;
 } 
  
 function ws_error()

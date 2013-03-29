@@ -378,7 +378,6 @@ function http_read()
 	// post
 	if ($post_data != null) 
 	{
-		error_log($post_data);
 		$headers[] = "Content-Type: application/json; charset=utf-8";
 		$headers[] = "Content-Length: ". (mb_strlen($post_data, "UTF-8"));
 	}

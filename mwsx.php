@@ -440,7 +440,7 @@ function http_read()
 	}
 	
 	// encoding
-	if (preg_match_all('#Content-Type: .*charset=(.*);?#', $head, $matches)) {
+	if (preg_match('#Content-Type: .*charset=(.*);?#', $head, $matches) AND ($matches[1] != "utf8")) {
 		$body = mb_convert_encoding($body, "utf8", $matches[1]);
 	}
 

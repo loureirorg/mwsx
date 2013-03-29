@@ -280,7 +280,7 @@ function ws($url)
 	}
 	
 	// try cache
-	$plain_mwsd = http_read($url, "");
+	$plain_mwsd = http_read($url);
 	$temp_name = sys_get_temp_dir(). "/mwsx_". md5($plain_mwsd. $namespace. "ws"). ".php";
 	if (!file_exists($temp_name)) 
 	{
@@ -322,7 +322,7 @@ function ws_include()
 	$mwsx_included[$md5] = true;
 	
 	// try cache
-	$plain_mwsd = http_read($url, "");
+	$plain_mwsd = http_read($url);
 	$temp_name = sys_get_temp_dir(). "/mwsx_". md5($plain_mwsd. $namespace. "ws_include"). ".php";
 	if (!file_exists($temp_name)) 
 	{
@@ -353,8 +353,13 @@ function ws_require()
 	return	ws_include(func_get_arg(0), func_get_arg(1));
 }
 
-function http_read($url, $raw_post_data)
+// $url[, $post_data]
+function http_read()
 {
+	// args: $url[, $post_data]
+	$url = func_get_arg(0);
+	$post_data = (func_num_args() == 2)? func_get_arg(1): null;
+
 	// it's a relative url (curl don't support relative url)
 	if (stripos($url, "http") !== 0)
 	{
@@ -367,11 +372,18 @@ function http_read($url, $raw_post_data)
 	
 	// headers
 	$headers = array(
-		"Content-Type: text/xml; charset=utf-8",
 		"Expect: ",
 	);
 
-	// cookie
+	// post
+	if ($post_data != null) 
+	{
+		error_log($post_data);
+		$headers[] = "Content-Type: application/json; charset=utf-8";
+		$headers[] = "Content-Length: ". (mb_strlen($post_data, "UTF-8"));
+	}
+
+	// cookies
 	if (session_id() == "") {
 		session_start();
 	}
@@ -396,11 +408,23 @@ function http_read($url, $raw_post_data)
 	curl_setopt($mwsx_curl, CURLOPT_URL, $url);	
 	curl_setopt($mwsx_curl, CURLOPT_HTTPHEADER, $headers);
 	curl_setopt($mwsx_curl, CURLOPT_HEADER, true); 
-	curl_setopt($mwsx_curl, CURLOPT_POST, true);
-	curl_setopt($mwsx_curl, CURLOPT_POSTFIELDS, $raw_post_data);
 	curl_setopt($mwsx_curl, CURLOPT_RETURNTRANSFER, true);
-	curl_setopt($mwsx_curl, CURLOPT_TIMEOUT, 120);
+	curl_setopt($mwsx_curl, CURLOPT_TIMEOUT, 600);
+	curl_setopt($mwsx_curl, CURLOPT_CONNECTTIMEOUT, 4);
 	curl_setopt($mwsx_curl, CURLOPT_SSL_VERIFYPEER, false);
+	if ($post_data != null) 
+	{
+		curl_setopt($mwsx_curl, CURLOPT_POST, true);
+		curl_setopt($mwsx_curl, CURLOPT_HTTPGET, false);
+		curl_setopt($mwsx_curl, CURLOPT_CUSTOMREQUEST, "POST");
+		curl_setopt($mwsx_curl, CURLOPT_POSTFIELDS, $post_data);
+	}
+	else 
+	{
+		curl_setopt($mwsx_curl, CURLOPT_POST, false);
+		curl_setopt($mwsx_curl, CURLOPT_HTTPGET, true);
+		curl_setopt($mwsx_curl, CURLOPT_CUSTOMREQUEST, "GET");
+	}
 	$result = curl_exec($mwsx_curl);
 	
 	// head + body split
@@ -411,7 +435,10 @@ function http_read($url, $raw_post_data)
 		$_SESSION["mwsx_cookie"] = array_merge($_SESSION["mwsx_cookie"], array_combine($matches[1], $matches[2]));
 	}
 	
-	// returns the body
+	// end: if "Location", go to page. Else, return the body
+	if (preg_match('#Location: (.*)?#', $head, $matches)) {
+		return	http_read($matches[1]);
+	}
 	return	$body;
 } 
  

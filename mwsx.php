@@ -434,10 +434,17 @@ function http_read()
 		$_SESSION["mwsx_cookie"] = array_merge($_SESSION["mwsx_cookie"], array_combine($matches[1], $matches[2]));
 	}
 	
-	// end: if "Location", go to page. Else, return the body
+	// if "Location", go to page
 	if (preg_match('#Location: (.*)?#', $head, $matches)) {
 		return	http_read($matches[1]);
 	}
+	
+	// encoding
+	if (preg_match_all('#Content-Type: .*charset=(.*);?#', $head, $matches)) {
+		$body = mb_convert_encoding($body, "utf8", $matches[1]);
+	}
+
+	// end: returns the body
 	return	$body;
 } 
  

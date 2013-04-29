@@ -1,6 +1,6 @@
 # mwsX - write in one language, run in all
 [![githalytics.com alpha](https://cruel-carlota.pagodabox.com/00c44fb2387137370abf057a0b4906cd "githalytics.com")](http://githalytics.com/loureirorg/mwsx)
-mwsX its a non-intrusive library to remotelly call a function, independent of which language it was written (aka "webservice"). You can include your PHP file in Javascript and access the PHP functions, or call Ruby methods in PHP, even in different server.
+mwsX it's a non-intrusive library to remotelly call a function, independent of which language it was written (aka "webservice"). You can include your PHP file in Javascript and access the PHP functions, or call Ruby methods in PHP, even in different server.
 
 ## Some uses
 * you can use PHP functions directly in JavaScript;
@@ -42,7 +42,7 @@ Calling "my_html.html" an alert will popup with "Hello World" message
 * namespaced
 * config file driven
 
-## Requirements at PHP side:
+## Requirements at PHP side
 * PHP 5.3 or higher
 * APC (* optional)
 
